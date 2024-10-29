@@ -1,34 +1,24 @@
-# main.py
-
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from pydantic import BaseModel
-from typing import Optional
-from PIL import Image
-import io
+import requests
+from fastapi import FastAPI, File, UploadFile
+from fastapi.responses import Response
 
 app = FastAPI()
 
-@app.post("/colorize")
-async def colorize_image(image: UploadFile = File(...), prompt: Optional[str] = Form(None)):
-    # Validate file type
-    if not image.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Invalid file type. Please upload an image file.")
+COLAB_COLORIZE_URL = "https://3da7-34-16-197-118.ngrok-free.app/colorize"  # Replace with your actual ngrok URL
 
-    # Load image to confirm it is valid (optional, but good practice)
+@app.post("/colorized")
+async def colorize_image(file: UploadFile = File(...)):
     try:
-        img = Image.open(io.BytesIO(await image.read()))
-        img.verify()  # Check if it is a valid image
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid image file.")
+        # Send the file to the Colab server
+        files = {"image": (file.filename, await file.read(), file.content_type)}
+        response = requests.post(COLAB_COLORIZE_URL, files=files)
 
-    # Mock colorization process - in a real scenario, apply your colorization algorithm here
-    colorized_image_url = "https://example.com/processed_image.png"  # Replace with actual URL if image is saved
+        # Check for errors
+        response.raise_for_status()
 
-    # Prepare response directly within the async function
-    response = {
-        "message": "Image colorization in progress. Download link will be available shortly.",
-        "colorized_image_url": colorized_image_url
-    }
+        # Return the image back to the client
+        return Response(content=response.content, media_type="image/jpeg")
 
-    return response
-
+    except Exception as e:
+        print(f"Error: {e}")
+        return {"error": "Failed to process the image. Check server logs for details."}
